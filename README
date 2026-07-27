@@ -1,93 +1,141 @@
-Tiny C Compiler - C Scripting Everywhere - The Smallest ANSI C compiler
------------------------------------------------------------------------
+Tiny C Compiler (TCC) — 最小的 ANSI C 编译器
+===============================================
 
-Features:
---------
-
-- SMALL! You can compile and execute C code everywhere, for example on
-  rescue disks.
-
-- FAST! tcc generates machine code for i386, x86_64, arm, aarch64 or
-  riscv64.  Compiles and links about 10 times faster than 'gcc -O0'.
-
-- UNLIMITED! Any C dynamic library can be used directly. TCC is
-  heading toward full ISOC99 compliance. TCC can of course compile
-  itself.
-
-- SAFE! tcc includes an optional memory and bound checker. Bound
-  checked code can be mixed freely with standard code.
-
-- Compile and execute C source directly. No linking or assembly
-  necessary. Full C preprocessor included.
-
-- C script supported : just add '#!/usr/local/bin/tcc -run' at the first
-  line of your C source, and execute it directly from the command
-  line.
-
-Documentation:
--------------
-
-1) Installation on Linux, BSD variants or macOS hosts:
-
-   ./configure
-   make
-   make test
-   make install
-
-   Notes: On BSD hosts, gmake should be used instead of make.
-   For Windows read tcc-win32.txt.
-
-makeinfo must be installed to compile the doc.  By default, tcc is
-installed in /usr/local/bin.  ./configure --help  shows configuration
-options.
+TCC 是一个极简的 C 编译器，能把 C 代码直接编译成机器码并立即执行。
+整个编译器只有几万行代码，编译速度比 GCC 快约 10 倍。
 
 
-2) Introduction
+特性
+----
 
-We assume here that you know ANSI C. Look at the example ex1.c to know
-what the programs look like.
+**极小** — 可运行在救援盘等任何地方，整个编译器约 400KB。
 
-The include file <tcclib.h> can be used if you want a small basic libc
-include support (especially useful for floppy disks). Of course, you
-can also use standard headers, although they are slower to compile.
+**极快** — 直接生成 i386、x86_64、ARM、AArch64、RISC-V 64 的机器码。
+编译 + 链接比 `gcc -O0` 快约 10 倍。
 
-You can begin your C script with '#!/usr/local/bin/tcc -run' on the first
-line and set its execute bits (chmod a+x your_script). Then, you can
-launch the C code as a shell or perl script :-) The command line
-arguments are put in 'argc' and 'argv' of the main functions, as in
-ANSI C.
+**自举** — TCC 可以编译自身。用 TCC 编译 TCC，形成完整自举链路。
 
-3) Examples
+**C 脚本** — 在源码第一行写上 `#!/usr/local/bin/tcc -run`，C 文件就能
+像 shell 脚本一样直接执行。
 
-ex1.c: simplest example (hello world). Can also be launched directly
-as a script: './ex1.c'.
+**安全** — 内置可选的内存越界检查器（`-b` 参数），可和普通代码混合使用。
 
-ex2.c: more complicated example: find a number with the four
-operations given a list of numbers (benchmark).
+**完整** — 内置 C 预处理器，无需外部预处理或汇编步骤。支持 ISO C99 标准。
 
-ex3.c: compute fibonacci numbers (benchmark).
+**跨平台** — 内置 portable POSIX 兼容层，Linux C 代码在 Windows 上
+零改动编译。
 
-ex4.c: more complicated: X11 program. Very complicated test in fact
-because standard headers are being used ! As for ex1.c, can also be launched
-directly as a script: './ex4.c'.
 
-ex5.c: 'hello world' with standard glibc headers.
+跨平台 —— portable 兼容层
+-------------------------
 
-tcc.c: TCC can of course compile itself. Used to check the code
-generator.
+`portable/` 提供了一套轻量 POSIX polyfill，**嵌入在 TCC 编译器内部**，
+让 Linux/POSIX C 代码在 Windows 上直接编译运行。
 
-tcctest.c: auto test for TCC which tests many subtle possible bugs. Used
-when doing 'make test'.
+### 设计思路
 
-4) Full Documentation
+Windows 的 MSVCRT 运行时只提供 ANSI C 标准函数，缺少大量 POSIX API。
+`portable/` 用 Win32 API 实现了这些缺失接口——本质是一个翻译层：
+POSIX 调用 → Win32 API 调用。
 
-Please read tcc-doc.html to have all the features of TCC.  Additional
-information for the Windows port is in tcc-win32.txt.
+每个函数只有几到十几行，全部实现在 `port.c`（约 27KB）中，
+不引入任何外部依赖。
 
-License:
--------
+### 支持模块（共 34 个函数）
 
-TCC is distributed under the GNU Lesser General Public License (see
-COPYING file).
+| 头文件 | 函数 |
+|--------|------|
+| `<termios.h>` | tcgetattr, tcsetattr, cfmakeraw, tcflush |
+| `<sys/ioctl.h>` | ioctl(TIOCGWINSZ), struct winsize |
+| `<sys/select.h>` | select, fd_set, FD_SET/FD_CLR/FD_ISSET |
+| `<poll.h>` | poll |
+| `<signal.h>` | sigaction, SIGWINCH |
+| `<dlfcn.h>` | dlopen, dlsym, dlclose, dlerror |
+| `<pthread.h>` | pthread_create/join, mutex, semaphore |
+| `<sys/mman.h>` | mmap, munmap（匿名映射） |
+| `<glob.h>` | glob, globfree |
+| `<unistd.h>` | getpid, sleep, usleep, getline, getopt, pread, pwrite, fsync, ftruncate |
+| `<dirent.h>` | scandir, alphasort |
+| `<string.h>` | strdup, strndup, strsep, memrchr, strcasestr, strerror_r（标准写法） |
+| `<stdlib.h>` | setenv, unsetenv, realpath, mkstemp, random, srandom, posix_memalign（标准写法） |
+| `<stdio.h>` | asprintf, vasprintf（标准写法） |
+| `<sys/time.h>` | gettimeofday |
+| `<time.h>` | nanosleep, clock_gettime（标准写法） |
+| `<syslog.h>` | openlog, syslog, closelog |
+| **额外** | link（NTFS 硬链接）, symlink（需管理员/开发者模式）, chown |
 
-Fabrice Bellard.
+### 用法
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <termios.h>
+#include <dlfcn.h>
+#include <pthread.h>
+
+int main() {
+    /* POSIX 函数——标准写法，零改动 */
+    char *s = strdup("hello");
+    printf("pid=%d\n", getpid());
+    return 0;
+}
+```
+
+### 已知限制
+
+| 函数 | 说明 |
+|------|------|
+| `fork()` | Windows 内核无进程克隆，返回 -1 并警告 |
+| `epoll` | Linux 专属，请用 `poll()` 代替 |
+| `symlink()` | 需管理员或开发者模式 |
+| `exec*` | MSVCRT 已有（`<process.h>` 提供 `_execvp` 等） |
+
+
+构建
+----
+
+### 从源码自举（Windows）
+
+首次自举需要一份已有的 TCC 或 GCC：
+
+```sh
+# 用已有的 tcc 编译
+tcc -B win32 -I include -I win32/include -I win32/include/winapi \
+    -D TCC_TARGET_X86_64 -D TCC_TARGET_PE -D __TINYC__=1 \
+    tcc.c -o tcc.exe
+
+# 自举验证
+./tcc.exe -B win32 -I include -I win32/include -I win32/include/winapi \
+    -D TCC_TARGET_X86_64 -D TCC_TARGET_PE -D __TINYC__=1 \
+    tcc.c -o tcc2.exe
+```
+
+自举三轮后，`stage2 == stage3` 即证明自举链路闭环。
+
+### Linux / BSD / macOS
+
+```sh
+./configure
+make
+make test
+make install
+```
+
+BSD 系统需用 `gmake` 代替 `make`。需要 `makeinfo` 编译文档。
+默认安装到 `/usr/local/bin`。`./configure --help` 查看配置选项。
+
+
+示例
+----
+
+`examples/` 目录下有多个示例程序，从 Hello World 到 X11 程序。
+`tcc.c` 是 TCC 自身源码——也是最好的测试用例。
+
+
+许可
+----
+
+TCC 基于 GNU Lesser General Public License 发布（详见 COPYING 文件）。
+
+原作者 Fabrice Bellard。后续由社区维护。

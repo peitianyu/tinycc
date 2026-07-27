@@ -277,7 +277,7 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #ifndef CONFIG_TCC_SYSINCLUDEPATHS
 # if defined TCC_TARGET_PE || defined _WIN32
 #  define CONFIG_TCC_SYSINCLUDEPATHS \
-    "{B}/include" PATHSEP "{B}/include/winapi"
+    "{B}/portable" PATHSEP "{B}/include" PATHSEP "{B}/include/winapi"
 # else
 #  define CONFIG_TCC_SYSINCLUDEPATHS \
     "{B}/include" PATHSEP ALSO_TRIPLET(CONFIG_SYSROOT "/usr/include")

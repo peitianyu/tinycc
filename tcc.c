@@ -28,6 +28,26 @@
 #endif
 #include "tcctools.c"
 
+#if ONE_SOURCE && defined(TCC_TARGET_PE)
+/* Include portable POSIX polyfill into tcc itself for -run/JIT support. */
+# ifdef strdup
+#  undef strdup
+# endif
+# ifdef malloc
+#  undef malloc
+# endif
+# ifdef free
+#  undef free
+# endif
+# ifdef realloc
+#  undef realloc
+# endif
+# ifdef realpath
+#  undef realpath   /* libtcc.c defines realpath() as _fullpath macro */
+# endif
+# include "portable/port.c"
+#endif
+
 static const char help[] =
     "Tiny C Compiler "TCC_VERSION" - Copyright (C) 2001-2006 Fabrice Bellard\n"
     "Usage: tcc [options...] [-o outfile] [-c] infile(s)...\n"
