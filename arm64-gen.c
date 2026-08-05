@@ -278,6 +278,8 @@ static int arm64_type_size(int t)
     case VT_DOUBLE: return 3;
     case VT_LDOUBLE: return 4;
     case VT_BOOL: return 0;
+    case VT_CDOUBLE: return 3; /* loads/stores per component */
+    case VT_CFLOAT: return 2;
     }
     assert(0);
     return 0;
@@ -715,7 +717,6 @@ ST_FUNC void store(int r, SValue *sv)
         return;
     }
 
-    printf("store(%x, (%x, %x, %lx))\n", r, svtt, sv->r, (long)svcoff);
     assert(0);
 }
 
