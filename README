@@ -148,7 +148,7 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 | `_Pragma` 操作符 | ✅ | 文件级支持（pack/push/pop/comment 等，含 `\\`/`\"` 转义处理）；宏内展开暂不支持（报错） |
 | `u8"..."` 字符串前缀 | ✅ | C11 UTF-8 字符串，与普通字符串同类型（char[]），支持拼接与 `\u` 转义（本次补全） |
 | `u'x'` / `U'x'` 字面量 | ✅ | char16_t/char32_t 字符常量（u'x' 16 位截断+越界警告）；`u"..."`/`U"..."` 字符串暂不支持（报错）；自带 `include/uchar.h` 提供 char16_t/char32_t typedef 与 `__STDC_UTF_16__` 宏（本次补全） |
-| `<threads.h>` 线程 API | ❌ | thrd_t/mtx_t/cnd_t/tss_t 全缺（补全中） |
+| `<threads.h>` 线程 API | ✅ | thrd/mtx/cnd/tss/call_once 全套，基于 pthread 实现（编译进 libtcc1.a 的 threads.o；本次补全） |
 
 ### 补全路线图
 
@@ -158,7 +158,14 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 1. ~~`u8"..."` 字符串前缀~~ ✅ 已完成（语义 = UTF-8 普通字符串）
 2. ~~`_Pragma` 操作符~~ ✅ 已完成（文件级；宏内展开暂不支持）
 3. ~~`u`/`U` 字面量前缀~~ ✅ 已完成（字符常量 + 自带 `uchar.h`；`u"..."/U"..."` 字符串暂不支持）
-4. `<threads.h>` 线程 API（pthread 包装）
+4. ~~`<threads.h>` 线程 API~~ ✅ 已完成（thrd/mtx/cnd/tss/call_once，pthread 包装）
+
+### 已知限制
+
+- `_Pragma` 在宏展开中暂不支持（报错）
+- `u"..."` / `U"..."` 字符串字面量暂不支持（报错）
+- `char16_t`/`char32_t` 为 typedef（无内置类型），`u'x'` 截断为 16 位并告警
+- Android/bionic 上 TCC 运行时回溯与 TLS 对齐存在环境性限制（上游同源）
 
 
 示例
