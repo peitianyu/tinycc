@@ -16,6 +16,7 @@ typedef pthread_once_t once_flag;
 
 #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
 #define TSS_DTOR_ITERATIONS 4
+#define thread_local _Thread_local
 
 enum {
     thrd_success = 0,

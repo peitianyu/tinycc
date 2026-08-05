@@ -2250,6 +2250,8 @@ static void parse_string(const char *s, int len)
         is_u16 = 1, ++s, --len;
     else if (s[0] == 'U' && s[1] == '\'')
         is_u32 = 1, ++s, --len;
+    else if ((s[0] == 'u' || s[0] == 'U') && s[1] == '\"')
+        tcc_error("%c\"...\" string literals are not supported yet", s[0]);
     else if (s[0] == 'L')
         is_long = 1, ++s, --len;
     sep = *s++;
