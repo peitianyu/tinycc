@@ -1180,8 +1180,10 @@ struct filespec {
 #define TOK_PPNUM   0xcd /* preprocessor number */
 #define TOK_PPSTR   0xce /* preprocessor string */
 #define TOK_LINENUM 0xcf /* line number info */
+#define TOK_U16STR  0xd0 /* C11 u"..." char16_t string */
+#define TOK_U32STR  0xd1 /* C11 U"..." char32_t string */
 
-#define TOK_HAS_VALUE(t) (t >= TOK_CCHAR && t <= TOK_LINENUM)
+#define TOK_HAS_VALUE(t) (t >= TOK_CCHAR && t <= TOK_U32STR)
 
 #define TOK_EOF       (-1)  /* end of file */
 #define TOK_LINEFEED  10    /* line feed */

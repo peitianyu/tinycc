@@ -572,14 +572,25 @@ ST_FUNC const char *get_tok_str(int v, CValue *cv)
         return (char*)cv->str.data;
     case TOK_LSTR:
         cstr_ccat(&cstr_buf, 'L');
-    case TOK_STR:
+        goto ustr_common;
+    case TOK_U16STR:
+        cstr_ccat(&cstr_buf, 'u');
+        goto ustr_common;
+    case TOK_U32STR:
+        cstr_ccat(&cstr_buf, 'U');
+    ustr_common:
         cstr_ccat(&cstr_buf, '\"');
         if (v == TOK_STR) {
             len = cv->str.size - 1;
             for(i=0;i<len;i++)
                 add_char(&cstr_buf, ((unsigned char *)cv->str.data)[i]);
+        } else if (v == TOK_U16STR) {
+            len = cv->str.size / 2 - 1;
+            for(i=0;i<len;i++)
+                add_char(&cstr_buf, ((unsigned short *)cv->str.data)[i]);
         } else {
-            len = (cv->str.size / sizeof(nwchar_t)) - 1;
+            int el = (v == TOK_U32STR ? 4 : sizeof(nwchar_t));
+            len = cv->str.size / el - 1;
             for(i=0;i<len;i++)
                 add_char(&cstr_buf, ((nwchar_t *)cv->str.data)[i]);
         }
@@ -1119,6 +1130,8 @@ static void tok_str_add2(TokenString *s, int t, CValue *cv)
     case TOK_PPSTR:
     case TOK_STR:
     case TOK_LSTR:
+    case TOK_U16STR:
+    case TOK_U32STR:
         {
             /* Insert the string into the int array. */
             size_t nb_words =
@@ -1204,6 +1217,8 @@ static inline void tok_get(int *t, const int **pp, CValue *cv)
 	break;
     case TOK_STR:
     case TOK_LSTR:
+    case TOK_U16STR:
+    case TOK_U32STR:
     case TOK_PPNUM:
     case TOK_PPSTR:
         cv->str.size = *p++;
@@ -2250,8 +2265,10 @@ static void parse_string(const char *s, int len)
         is_u16 = 1, ++s, --len;
     else if (s[0] == 'U' && s[1] == '\'')
         is_u32 = 1, ++s, --len;
-    else if ((s[0] == 'u' || s[0] == 'U') && s[1] == '\"')
-        tcc_error("%c\"...\" string literals are not supported yet", s[0]);
+    else if (s[0] == 'u' && s[1] == '\"')
+        is_u16 = 1, ++s, --len;
+    else if (s[0] == 'U' && s[1] == '\"')
+        is_u32 = 1, ++s, --len;
     else if (s[0] == 'L')
         is_long = 1, ++s, --len;
     sep = *s++;
@@ -2293,14 +2310,55 @@ static void parse_string(const char *s, int len)
         }
         tokc.i = c;
     } else {
-        if (is_u16 || is_u32)
-            tcc_error("u\"...\" / U\"...\" string literals not supported yet");
-        tokc.str.size = tokcstr.size;
-        tokc.str.data = tokcstr.data;
-        if (!is_long)
-            tok = TOK_STR;
-        else
-            tok = TOK_LSTR;
+        if (is_u16 || is_u32) {
+            /* Re-encode code points (nwchar_t array) into the literal's
+               element width: UTF-16 (2 bytes, surrogate pairs for
+               non-BMP) for u"...", UTF-32 (4 bytes) for U"...". */
+            int nn = tokcstr.size / sizeof(nwchar_t) - 1;
+            nwchar_t *cp = tcc_malloc(tokcstr.size);
+            int i;
+            memcpy(cp, tokcstr.data, tokcstr.size);
+            cstr_reset(&tokcstr);
+            for (i = 0; i < nn; ++i) {
+                unsigned cc = (unsigned)cp[i];
+                if (is_u16) {
+                    if (cc > 0xFFFF) {
+                        unsigned hi, lo;
+                        cc -= 0x10000;
+                        hi = 0xD800 + (cc >> 10);
+                        lo = 0xDC00 + (cc & 0x3FF);
+                        cstr_ccat(&tokcstr, hi & 0xFF);
+                        cstr_ccat(&tokcstr, hi >> 8);
+                        cstr_ccat(&tokcstr, lo & 0xFF);
+                        cstr_ccat(&tokcstr, lo >> 8);
+                    } else {
+                        cstr_ccat(&tokcstr, cc & 0xFF);
+                        cstr_ccat(&tokcstr, cc >> 8);
+                    }
+                } else {
+                    cstr_ccat(&tokcstr, cc & 0xFF);
+                    cstr_ccat(&tokcstr, (cc >> 8) & 0xFF);
+                    cstr_ccat(&tokcstr, (cc >> 16) & 0xFF);
+                    cstr_ccat(&tokcstr, cc >> 24);
+                }
+            }
+            if (is_u16)
+                cstr_ccat(&tokcstr, 0), cstr_ccat(&tokcstr, 0);
+            else
+                cstr_ccat(&tokcstr, 0), cstr_ccat(&tokcstr, 0),
+                cstr_ccat(&tokcstr, 0), cstr_ccat(&tokcstr, 0);
+            tcc_free(cp);
+            tokc.str.size = tokcstr.size;
+            tokc.str.data = tokcstr.data;
+            tok = is_u16 ? TOK_U16STR : TOK_U32STR;
+        } else {
+            tokc.str.size = tokcstr.size;
+            tokc.str.data = tokcstr.data;
+            if (!is_long)
+                tok = TOK_STR;
+            else
+                tok = TOK_LSTR;
+        }
     }
 }
 
