@@ -262,6 +262,9 @@ static int R2_RET(int t)
 #elif defined TCC_TARGET_RISCV64
     if (t == VT_LDOUBLE)
         return REG_IRE2;
+#elif defined TCC_TARGET_ARM64
+    if (t == VT_CDOUBLE || t == VT_CFLOAT)
+        return REG_FRET + 1; /* v1 */
 #endif
     return VT_CONST;
 }
@@ -5863,7 +5866,8 @@ static void parse_atomic(int atok)
     gfunc_call(arg - save);
 
     vpush(&ct);
-    PUT_R_RET(vtop, ct.t);
+    if ((ct.t & VT_BTYPE) != VT_CDOUBLE && (ct.t & VT_BTYPE) != VT_CFLOAT)
+        PUT_R_RET(vtop, ct.t);
     t = ct.t & VT_BTYPE;
     if (t == VT_BYTE || t == VT_SHORT || t == VT_BOOL) {
 #ifdef PROMOTE_RET
@@ -6528,7 +6532,9 @@ special_math_val:
             nb_args = regsize = 0;
             ret.r2 = VT_CONST;
             /* compute first implicit argument if a structure is returned */
-            if ((s->type.t & VT_BTYPE) == VT_STRUCT) {
+            if ((s->type.t & VT_BTYPE) == VT_STRUCT
+                || (s->type.t & VT_BTYPE) == VT_CDOUBLE
+                || (s->type.t & VT_BTYPE) == VT_CFLOAT) {
                 variadic = (s->f.func_type == FUNC_ELLIPSIS);
                 ret_nregs = gfunc_sret(&s->type, variadic, &ret.type,
                                        &ret_align, &regsize);

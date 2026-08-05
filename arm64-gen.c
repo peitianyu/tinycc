@@ -847,7 +847,14 @@ static int arm64_hfa_aux(CType *type, int *fsize, int num)
 
 static int arm64_hfa(CType *type, unsigned *fsize)
 {
-    if ((type->t & VT_BTYPE) == VT_STRUCT) {
+    int bt = type->t & VT_BTYPE;
+    if (bt == VT_CDOUBLE || bt == VT_CFLOAT) {
+        /* _Complex: homogeneous two-component float aggregate */
+        if (fsize)
+            *fsize = (bt == VT_CDOUBLE) ? 8 : 4;
+        return 2;
+    }
+    if (bt == VT_STRUCT) {
         int sz = 0;
         int n = arm64_hfa_aux(type, &sz, 0);
         if (0 < n && n <= 4) {
@@ -875,7 +882,6 @@ static unsigned long arm64_pcs_aux(int variadic, int n, CType **type, unsigned l
             size = align = 8;
         else
             size = type_size(type[i], &align);
-
 #if defined(TCC_TARGET_MACHO)
         if (variadic && i == variadic) {
             nx = 8;
@@ -907,8 +913,8 @@ static unsigned long arm64_pcs_aux(int variadic, int n, CType **type, unsigned l
             // B.4
             size = (size + 7) & ~7;
 
-        // C.1
-        if (is_float(bt) && nv < 8) {
+        // C.1 (complex is excluded: it needs two float regs, handled by C.2)
+        if (is_float(bt) && !(bt == VT_CDOUBLE || bt == VT_CFLOAT) && nv < 8) {
             a[i] = 16 + (nv++ << 1);
             continue;
         }
@@ -1095,7 +1101,9 @@ ST_FUNC void gfunc_call(int nb_args)
 #endif
 
     return_type = &vtop[-nb_args].type.ref->type;
-    if ((return_type->t & VT_BTYPE) == VT_STRUCT)
+    if ((return_type->t & VT_BTYPE) == VT_STRUCT
+        || (return_type->t & VT_BTYPE) == VT_CDOUBLE
+        || (return_type->t & VT_BTYPE) == VT_CFLOAT)
         --nb_args;
 
     t = tcc_malloc((nb_args + 1) * sizeof(*t));
@@ -1197,7 +1205,9 @@ ST_FUNC void gfunc_call(int nb_args)
             arm64_spoff(a[i] / 2, a1[i]);
         else if (a[i] < 32) {
             // value in floating-point registers
-            if ((vtop->type.t & VT_BTYPE) == VT_STRUCT) {
+            if (((vtop->type.t & VT_BTYPE) == VT_STRUCT)
+                || (vtop->type.t & VT_BTYPE) == VT_CDOUBLE
+                || (vtop->type.t & VT_BTYPE) == VT_CFLOAT) {
                 uint32_t j, sz, n = arm64_hfa(&vtop->type, &sz);
                 if (n > 0) {
                     /* HFA struct - load from memory into float registers */
@@ -1217,7 +1227,9 @@ ST_FUNC void gfunc_call(int nb_args)
         }
     }
 
-    if ((return_type->t & VT_BTYPE) == VT_STRUCT) {
+    if (((return_type->t & VT_BTYPE) == VT_STRUCT)
+        || (return_type->t & VT_BTYPE) == VT_CDOUBLE
+        || (return_type->t & VT_BTYPE) == VT_CFLOAT) {
         if (a[0] == 1) {
             // indirect return: set x8 and discard the stack value
             gv_addr(RC_R(8));
@@ -1238,7 +1250,7 @@ ST_FUNC void gfunc_call(int nb_args)
     {
         int rt = return_type->t;
         int bt = rt & VT_BTYPE;
-        if (bt == VT_STRUCT && !(a[0] & 1)) {
+        if ((bt == VT_STRUCT || bt == VT_CDOUBLE || bt == VT_CFLOAT) && !(a[0] & 1)) {
             // A struct was returned in registers, so write it out:
             gv_addr(RC_R(8));
             --vtop;
@@ -1616,8 +1628,11 @@ ST_FUNC void gfunc_return(CType *func_type)
         break;
     }
     case 16:
-        if ((func_type->t & VT_BTYPE) == VT_STRUCT) {
-          /* HFA struct return - load from the address on vtop into float registers */
+        if (((func_type->t & VT_BTYPE) == VT_STRUCT)
+            || (func_type->t & VT_BTYPE) == VT_CDOUBLE
+            || (func_type->t & VT_BTYPE) == VT_CFLOAT) {
+          /* HFA struct (or _Complex) return - load from the address on
+             vtop into float registers */
           uint32_t j, sz, n = arm64_hfa(func_type, &sz);
           gv_addr(RC_R(0));
           for (j = 0; j < n; j++)
