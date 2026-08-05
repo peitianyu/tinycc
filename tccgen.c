@@ -5003,6 +5003,35 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
     bt = st = -1;
     type->ref = NULL;
 
+    /* C23 standard attributes [[...]] at the start of a declaration */
+    while (tok == '[') {
+        int save = tok;
+        next();
+        if (tok != '[') {
+            unget_tok(save);
+            break;
+        }
+        next();
+        while (tok != ']' && tok != TOK_EOF) {
+            if (tok == '(') {
+                int depth = 1;
+                next();
+                while (depth && tok != TOK_EOF) {
+                    if (tok == '(') depth++;
+                    else if (tok == ')') depth--;
+                    if (depth) next();
+                }
+                next();
+                continue;
+            }
+            next();
+        }
+        if (tok == ']') {
+            next();
+            if (tok == ']') next();
+        }
+    }
+
     while(1) {
         switch(tok) {
         case TOK_EXTENSION:
