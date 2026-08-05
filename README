@@ -147,7 +147,9 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 | `aligned_alloc` 等 | ⚠️ | 函数存在，但 bionic 头文件用 `__BIONIC_AVAILABILITY_GUARD`（依赖 Clang 宏）屏蔽声明 |
 | `_Pragma` 操作符 | ✅ | 文件级支持（pack/push/pop/comment 等，含 `\\`/`\"` 转义处理）；宏内展开暂不支持（报错） |
 | `u8"..."` 字符串前缀 | ✅ | C11 UTF-8 字符串，与普通字符串同类型（char[]），支持拼接与 `\u` 转义（本次补全） |
-| `u'x'` / `U'x'` 字面量 | ✅ | char16_t/char32_t 字符常量（u'x' 16 位截断+越界警告）；`u"..."`/`U"..."` 字符串明确报错（未实现）；自带 `include/uchar.h` 提供 char16_t/char32_t typedef 与 `__STDC_UTF_16__` 宏（本次补全） |
+| `u'x'` / `U'x'` 字面量 | ✅ | char16_t/char32_t 字符常量（u'x' 16 位截断+越界警告） |
+| `u"..."` / `U"..."` 字符串 | ✅ | char16_t/char32_t 数组字面量：u"..." UTF-16（非 BMP 自动代理对）、U"..." UTF-32，支持拼接/全局/指针初始化（本次补全） |
+| `_Complex` 复数 | ❌ | `error: _Complex is not yet supported`（`__STDC_NO_COMPLEX__` 保持定义） |
 | `_Complex` 复数 | ❌ | `error: _Complex is not yet supported`（`__STDC_NO_COMPLEX__` 保持定义） |
 | `<threads.h>` 线程 API | ✅ | thrd/mtx/cnd/tss/call_once 全套 + `thread_local` 宏；`__STDC_NO_THREADS__` 不再定义 |
 
@@ -164,7 +166,6 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 ### 已知限制
 
 - `_Pragma` 在宏展开中暂不支持（报错）
-- `u"..."` / `U"..."` 字符串字面量暂不支持（报错）
 - `char16_t`/`char32_t` 为 typedef（无内置类型），`u'x'` 截断为 16 位并告警
 - Android/bionic 上 TCC 运行时回溯与 TLS 对齐存在环境性限制（上游同源）
 
