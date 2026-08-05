@@ -1399,8 +1399,12 @@ ST_FUNC void gfunc_prolog(Sym *func_sym)
                                           (hfa ? hfa : 1)) * 16;
         }
 
-        // HFAs of float and double need to be written differently:
-        if (16 <= a[i] && a[i] < 32 && (sym->type.t & VT_BTYPE) == VT_STRUCT) {
+        // HFAs of float and double (and _Complex) need to be written
+        // differently: store each component at the param's slot offset.
+        if (16 <= a[i] && a[i] < 32
+            && ((sym->type.t & VT_BTYPE) == VT_STRUCT
+                || (sym->type.t & VT_BTYPE) == VT_CDOUBLE
+                || (sym->type.t & VT_BTYPE) == VT_CFLOAT)) {
             uint32_t j, sz, k = arm64_hfa(&sym->type, &sz);
             if (k > 0 && sz < 16)
                 for (j = 0; j < k; j++) {

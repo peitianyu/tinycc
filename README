@@ -149,7 +149,7 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 | `u8"..."` 字符串前缀 | ✅ | C11 UTF-8 字符串，与普通字符串同类型（char[]），支持拼接与 `\u` 转义（本次补全） |
 | `u'x'` / `U'x'` 字面量 | ✅ | char16_t/char32_t 字符常量（u'x' 16 位截断+越界警告） |
 | `u"..."` / `U"..."` 字符串 | ✅ | char16_t/char32_t 数组字面量：u"..." UTF-16（非 BMP 自动代理对）、U"..." UTF-32，支持拼接/全局/指针初始化（本次补全） |
-| `_Complex` 复数 | ⚠️ | 类型/赋值/四则运算/宽度转换/初始化/`<complex.h>` 已实现；**函数返回 ABI 已支持**（v0/v1）；函数**参数**传递实部正常、虚部暂丢（ABI 调试中） |
+| `_Complex` 复数 | ✅ | `_Complex double/float` 完整支持：类型/赋值/四则运算/宽度转换/初始化/`<complex.h>`（I/creal/cimag）/函数参数与返回 ABI（v0/v1，含 float 复数与嵌套）；`__STDC_NO_COMPLEX__` 已移除 |
 | `<threads.h>` 线程 API | ✅ | thrd/mtx/cnd/tss/call_once 全套 + `thread_local` 宏；`__STDC_NO_THREADS__` 不再定义 |
 
 ### 补全路线图
