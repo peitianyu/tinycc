@@ -8420,6 +8420,14 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
                 sec = find_section(tcc_state, has_init ? ".tdata" : ".tbss");
                 sec->sh_flags = SHF_ALLOC | SHF_WRITE | SHF_TLS;
                 sec->sh_type = has_init ? SHT_PROGBITS : SHT_NOBITS;
+#if defined(TCC_TARGET_ARM64) && defined(TARGETOS_ANDROID)
+                /* bionic's ARM64 loader requires the TLS segment to be
+                   aligned to at least 64 bytes (it errors otherwise:
+                   "TLS segment is underaligned ... needs to be at least
+                   64 for ARM64 Bionic"). */
+                if (sec->sh_addralign < 64)
+                    sec->sh_addralign = 64;
+#endif
             } else if (tp->t & VT_CONSTANT) {
 		sec = rodata_section;
             } else if (has_init) {

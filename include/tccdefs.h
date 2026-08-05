@@ -125,6 +125,10 @@
 
 #elif defined __ANDROID__
     #define  BIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD
+    /* bionic gates newer libc declarations behind
+       __BIONIC_AVAILABILITY_GUARD(api) = (__ANDROID_MIN_SDK_VERSION__ >= api);
+       without this they are hidden and callers get implicit-int decls. */
+    #define __ANDROID_MIN_SDK_VERSION__ 28
 
 #else
     /* Linux */
