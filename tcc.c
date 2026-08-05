@@ -28,8 +28,11 @@
 #endif
 #include "tcctools.c"
 
-#if ONE_SOURCE && defined(TCC_TARGET_PE)
-/* Include portable POSIX polyfill into tcc itself for -run/JIT support. */
+#if ONE_SOURCE && defined(_WIN32)
+/* Include portable POSIX polyfill into tcc itself for -run/JIT support.
+   Guard on the host compiler's _WIN32 (defined only when building ON
+   Windows), not TCC_TARGET_PE (also defined when cross-compiling a PE
+   target from a non-Windows host, where windows.h does not exist). */
 # ifdef strdup
 #  undef strdup
 # endif
