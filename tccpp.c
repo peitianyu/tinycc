@@ -1799,25 +1799,13 @@ pragma_err:
    #pragma directive.  The string's \\ and \" escapes are processed per
    6.10.9.  The directive text is re-tokenized from a synthetic buffer file
    so it flows through preprocess()/pragma_parse() exactly like #pragma. */
-static void handle_pragma_operator(void)
+/* Unescape a quoted pragma string "..." into content (\" and \\ handled
+   per C11 6.10.9).  Returns the content length or -1 on malformed input. */
+static int pragma_unescape(const char *p, int len, char *content)
 {
-    TCCState *s1 = tcc_state;
-    CString cs;
-    char *content;
-    const char *p;
-    int len, i, j, c;
-
-    next_nomacro();
-    if (tok != '(')
-        goto pragma_op_err;
-    next_nomacro();
-    if (tok != TOK_PPSTR)
-        goto pragma_op_err;
-    p = tokc.str.data;
-    len = tokc.str.size; /* includes quotes and terminating NUL */
+    int i, j, c;
     if (len < 3 || p[0] != '"' || p[len - 2] != '"')
-        goto pragma_op_err;
-    content = tcc_malloc(len);
+        return -1;
     for (i = 1, j = 0; i < len - 2; ++i) {
         c = p[i];
         if (c == '\\' && i + 1 < len - 2) {
@@ -1828,6 +1816,29 @@ static void handle_pragma_operator(void)
         content[j++] = c;
     }
     content[j] = 0;
+    return j;
+}
+
+static void handle_pragma_operator(void)
+{
+    TCCState *s1 = tcc_state;
+    CString cs;
+    char *content;
+    const char *p;
+    int len, j;
+
+    next_nomacro();
+    if (tok != '(')
+        goto pragma_op_err;
+    next_nomacro();
+    if (tok != TOK_PPSTR)
+        goto pragma_op_err;
+    p = tokc.str.data;
+    len = tokc.str.size; /* includes quotes and terminating NUL */
+    content = tcc_malloc(len);
+    j = pragma_unescape(p, len, content);
+    if (j < 0)
+        goto pragma_op_err;
     next_nomacro();
     if (tok != ')')
         goto pragma_op_err;
@@ -3700,10 +3711,54 @@ redo:
         }
         tok = t;
         if (t == TOK__Pragma) {
-            /* _Pragma produced by macro expansion: the remaining pragma
-               tokens live in the macro stream, which cannot currently be
-               re-dispatched through preprocess(); reject clearly. */
-            tcc_error("_Pragma inside macro expansion is not supported");
+            /* _Pragma from macro expansion: read ( "..." ) from the macro
+               stream.  Supported when the macro ends right after the
+               closing paren (e.g. #define PACK _Pragma("pack(push,1)"));
+               otherwise the remaining macro tokens cannot be resumed
+               after the pragma buffer is processed. */
+            TCCState *s1 = tcc_state;
+            CString cs;
+            char *content;
+            const char *p;
+            int pt, len, j;
+
+            if (*macro_ptr == '(') {
+                ++macro_ptr;
+            } else {
+                tcc_error("_Pragma inside macro expansion: expected '('");
+            }
+            pt = *macro_ptr;
+            if (pt != TOK_PPSTR && pt != TOK_STR) {
+                tcc_error("_Pragma inside macro expansion: expected string literal");
+            }
+            TOK_GET(&pt, &macro_ptr, &tokc);
+            p = tokc.str.data;
+            len = tokc.str.size;
+            content = tcc_malloc(len);
+            j = pragma_unescape(p, len, content);
+            if (j < 0)
+                tcc_error("_Pragma inside macro expansion: malformed string");
+            if (*macro_ptr == ')') {
+                ++macro_ptr;
+            } else {
+                tcc_error("_Pragma inside macro expansion: expected ')'");
+            }
+            if (*macro_ptr != 0 && *macro_ptr != TOK_EOF) {
+                tcc_error("_Pragma inside macro expansion: not supported after other tokens");
+            }
+            cstr_new(&cs);
+            cstr_ccat(&cs, '#');
+            cstr_cat(&cs, "pragma", 6);
+            cstr_ccat(&cs, ' ');
+            cstr_cat(&cs, content, j);
+            cstr_ccat(&cs, '\n');
+            *s1->include_stack_ptr++ = file;
+            tcc_open_bf(s1, ":pragma:", cs.size);
+            memcpy(file->buffer, cs.data, cs.size);
+            end_macro(); /* macro stream is fully consumed */
+            cstr_free(&cs);
+            tcc_free(content);
+            goto file_tokens;
         }
         return;
     }
