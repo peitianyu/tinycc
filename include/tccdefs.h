@@ -75,6 +75,13 @@
 #endif
     #endif
 
+    /* C23 keywords (macro forms): bool/true/false are now keywords in
+       C23; nullptr is the type-safe null pointer constant. */
+    #define bool _Bool
+    #define true 1
+    #define false 0
+    #define nullptr ((void *)0)
+
 #if defined _WIN32
     #define __declspec(x) __attribute__((x))
     #define __cdecl

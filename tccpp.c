@@ -2431,6 +2431,13 @@ static void parse_number(const char *p)
     /* parse all digits. cannot check octal numbers at this stage
        because of floating point constants */
     while (1) {
+        if (ch == '\'' && (isnum(*p) || (*p >= 'a' && *p <= 'f')
+                            || (*p >= 'A' && *p <= 'F'))) {
+            /* C23 digit separator: skip it (must be followed by a
+               digit / hex letter) */
+            ch = *p++;
+            continue;
+        }
         if (ch >= 'a' && ch <= 'f')
             t = ch - 'a' + 10;
         else if (ch >= 'A' && ch <= 'F')
@@ -2937,6 +2944,12 @@ maybe_newline:
     parse_num:
         cstr_reset(&tokcstr);
         for(;;) {
+            if (c == '\'' && (isidnum_table[p[1] - CH_EOF] & (IS_ID|IS_NUM))) {
+                /* C23 digit separator: skip ' when followed by a digit */
+                p++;
+                c = *p;
+                continue;
+            }
             cstr_ccat(&tokcstr, t);
             if (!((isidnum_table[c - CH_EOF] & (IS_ID|IS_NUM))
                   || c == '.'
