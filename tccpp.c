@@ -3269,6 +3269,52 @@ static int *macro_arg_subst(Sym **nested_list, const int *macro_str, Sym *args)
             } else {
                 expect("macro parameter after '#'");
             }
+        } else if (t == TOK___VA_OPT__) {
+            /* C23 __VA_OPT__(content): content if __VA_ARGS__ non-empty */
+            Sym *va = sym_find2(args, TOK___VA_ARGS__);
+            int empty = (!va || *va->d == TOK_EOF
+                         || (va->d[0] == ' ' && va->d[1] == TOK_EOF));
+            TokenString c;
+            int depth = 1;
+            TOK_GET(&t, &macro_str, &cval);
+            if (t != '(')
+                tcc_error("__VA_OPT__ expects '('");
+            tok_str_new(&c);
+            for (;;) {
+                TOK_GET(&t, &macro_str, &cval);
+                if (!t)
+                    tcc_error("unterminated __VA_OPT__");
+                if (t == '(')
+                    depth++;
+                else if (t == ')' && !--depth)
+                    break;
+                tok_str_add2(&c, t, &cval);
+            }
+            tok_str_add(&c, 0);
+            if (!empty) {
+                /* substitute arguments inside the content manually */
+                const int *sp = c.str;
+                while (*sp) {
+                    int ct;
+                    CValue cc;
+                    TOK_GET(&ct, &sp, &cc);
+                    if (ct >= TOK_IDENT) {
+                        Sym *ps = sym_find2(args, ct);
+                        if (ps) {
+                            const int *pst = ps->d;
+                            while (*pst != TOK_EOF) {
+                                int p2;
+                                CValue cv2;
+                                TOK_GET(&p2, &pst, &cv2);
+                                tok_str_add2(&str, p2, &cv2);
+                            }
+                            continue;
+                        }
+                    }
+                    tok_str_add2(&str, ct, &cc);
+                }
+            }
+            tok_str_free_str(c.str);
         } else if (t >= TOK_IDENT) {
             s = sym_find2(args, t);
             if (s) {
