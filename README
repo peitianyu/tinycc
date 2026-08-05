@@ -126,6 +126,41 @@ BSD 系统需用 `gmake` 代替 `make`。需要 `makeinfo` 编译文档。
 默认安装到 `/usr/local/bin`。`./configure --help` 查看配置选项。
 
 
+C11 支持状态
+-------------
+
+TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得出
+（AArch64/Android，tcc 0.9.28rc），`c11check.sh` 可复测：
+
+| 特性 | 状态 | 说明 |
+|------|------|------|
+| `__STDC_VERSION__` | ✅ | `-std=c11` 下为 `201112L` |
+| `_Static_assert` | ✅ | 编译期断言 |
+| `_Generic` | ✅ | 泛型选择，含 `default` 分支与指针关联类型 |
+| `_Alignas` / `_Alignof` | ✅ | 含 `<stdalign.h>` 的 `alignas`/`alignof` |
+| `_Noreturn` | ✅ | 含 `<stdnoreturn.h>` 的 `noreturn` |
+| `_Atomic` | ✅ | 含 `<stdatomic.h>`（fetch/CAS） |
+| 匿名 struct/union 成员 | ✅ | C11 匿名成员 |
+| 复合字面量 / 柔性数组 / VLA | ✅ | C99 延续 |
+| `_Thread_local` | ⚠️ | 语法与编译通过；Android bionic 要求 TLS 段 64B 对齐而 TCC 只生成 8B，运行时受限（上游同源问题） |
+| `char16_t`/`char32_t` | ⚠️ | 无内置类型；Windows 版自带 `win32/include/uchar.h` 用 typedef 兜底；Linux 系统头文件依赖 GCC 内置宏 `__CHAR16_TYPE__` |
+| `aligned_alloc` 等 | ⚠️ | 函数存在，但 bionic 头文件用 `__BIONIC_AVAILABILITY_GUARD`（依赖 Clang 宏）屏蔽声明 |
+| `_Pragma` 操作符 | ❌ | C99 起就有；TCC 仅实现 `#pragma` 指令（补全中） |
+| `u8"..."` 字符串前缀 | ❌ | C11 UTF-8 字符串（补全中） |
+| `u'x'` / `U'x'` 字面量 | ❌ | char16_t/char32_t 字面量（补全中） |
+| `<threads.h>` 线程 API | ❌ | thrd_t/mtx_t/cnd_t/tss_t 全缺（补全中） |
+
+### 补全路线图
+
+按从易到难推进，每项完成后：更新本文档 → 运行 `c11check.sh` 与官方测试套件
+→ git 提交 → 推送 GitHub：
+
+1. `u8"..."` 字符串前缀（语义 = UTF-8 普通字符串）
+2. `_Pragma` 操作符（字符串化 pragma）
+3. `u`/`U` 字面量前缀 + 自带 `uchar.h`
+4. `<threads.h>` 线程 API（pthread 包装）
+
+
 示例
 ----
 
