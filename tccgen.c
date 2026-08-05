@@ -2557,23 +2557,26 @@ static void push_complex_component(SValue *src, int is_im, int csize, CType *sca
     gv(RC_FLOAT);
 }
 
-/* store the scalar at vtop into temp slot offset 'off' (component width) */
-static void store_complex_comp(int l, int off, CType *scalar)
+/* store the scalar at vtop into temp slot offset 'off' (component width).
+   r2 marks the temp slot in use so spill cannot reuse it. */
+static void store_complex_comp(int l, int off, CType *scalar, int r2)
 {
     vpushi(l + off);
     vtop->type = *scalar;
     vtop->r = VT_LOCAL | VT_LVAL;
+    vtop->r2 = r2;
     vswap();
     vstore();
     vpop();
 }
 
 /* load scalar from temp slot into vtop */
-static void load_complex_comp(int l, int off, CType *scalar)
+static void load_complex_comp(int l, int off, CType *scalar, int r2)
 {
     vpushi(l + off);
     vtop->type = *scalar;
     vtop->r = VT_LOCAL | VT_LVAL;
+    vtop->r2 = r2;
     gv(RC_FLOAT);
 }
 
@@ -2601,36 +2604,36 @@ static void gen_opf_complex(int op, int bt)
         push_complex_component(&sv1, 0, csize, &st);
         push_complex_component(&sv2, 0, csize, &st);
         gen_opif(op);
-        store_complex_comp(l, 0, &st);
+        store_complex_comp(l, 0, &st, r2);
         push_complex_component(&sv1, 1, csize, &st);
         push_complex_component(&sv2, 1, csize, &st);
         gen_opif(op);
-        store_complex_comp(l, csz2, &st);
+        store_complex_comp(l, csz2, &st, r2);
     } else if (op == '*') {
         /* re = ac - bd, im = ad + bc.  Intermediate products live on the
            vtop stack or in the result slot (so spill cannot reuse them). */
         push_complex_component(&sv1, 0, csize, &st);
         push_complex_component(&sv2, 0, csize, &st);
         gen_opif('*');
-        store_complex_comp(l, 0, &st);
+        store_complex_comp(l, 0, &st, r2);
         push_complex_component(&sv1, 1, csize, &st);
         push_complex_component(&sv2, 1, csize, &st);
         gen_opif('*');
-        load_complex_comp(l, 0, &st);
+        load_complex_comp(l, 0, &st, r2);
         vswap();
         gen_opif('-');
-        store_complex_comp(l, 0, &st);
+        store_complex_comp(l, 0, &st, r2);
         push_complex_component(&sv1, 0, csize, &st);
         push_complex_component(&sv2, 1, csize, &st);
         gen_opif('*');
-        store_complex_comp(l, csz2, &st);
+        store_complex_comp(l, csz2, &st, r2);
         push_complex_component(&sv1, 1, csize, &st);
         push_complex_component(&sv2, 0, csize, &st);
         gen_opif('*');
-        load_complex_comp(l, csz2, &st);
+        load_complex_comp(l, csz2, &st, r2);
         vswap();
         gen_opif('+');
-        store_complex_comp(l, csz2, &st);
+        store_complex_comp(l, csz2, &st, r2);
     } else if (op == '/') {
         /* re = (a*c + b*d)/den, im = (b*c - a*d)/den, den = c*c + d*d.
            Slot is 2x so den can live at l+csize without clobbering the
@@ -2639,44 +2642,44 @@ static void gen_opf_complex(int op, int bt)
         push_complex_component(&sv1, 0, csize, &st);   /* a */
         push_complex_component(&sv2, 0, csize, &st);   /* c */
         gen_opif('*');                                  /* a*c */
-        store_complex_comp(l, csz2, &st);               /* im slot = a*c */
+        store_complex_comp(l, csz2, &st, r2);               /* im slot = a*c */
         push_complex_component(&sv1, 1, csize, &st);   /* b */
         push_complex_component(&sv2, 1, csize, &st);   /* d */
         gen_opif('*');                                  /* b*d */
-        load_complex_comp(l, csz2, &st);                /* a*c */
+        load_complex_comp(l, csz2, &st, r2);                /* a*c */
         vswap();                                        /* vtop=b*d, vtop[-1]=a*c */
         gen_opif('+');                                  /* a*c + b*d */
-        store_complex_comp(l, csz2, &st);               /* im slot = numerator_re */
+        store_complex_comp(l, csz2, &st, r2);               /* im slot = numerator_re */
         /* den = c*c + d*d -> l+csize */
         push_complex_component(&sv2, 0, csize, &st);   /* c */
         push_complex_component(&sv2, 0, csize, &st);   /* c */
         gen_opif('*');                                  /* c*c */
-        store_complex_comp(l, csize, &st);              /* den slot = c*c */
+        store_complex_comp(l, csize, &st, r2);              /* den slot = c*c */
         push_complex_component(&sv2, 1, csize, &st);   /* d */
         push_complex_component(&sv2, 1, csize, &st);   /* d */
         gen_opif('*');                                  /* d*d */
-        load_complex_comp(l, csize, &st);               /* c*c */
+        load_complex_comp(l, csize, &st, r2);               /* c*c */
         vswap();                                        /* vtop=d*d, vtop[-1]=c*c */
         gen_opif('+');                                  /* den */
-        store_complex_comp(l, csize, &st);              /* den slot = den */
-        load_complex_comp(l, csz2, &st);                /* numerator_re */
-        load_complex_comp(l, csize, &st);               /* den: vtop=den, vtop[-1]=num */
+        store_complex_comp(l, csize, &st, r2);              /* den slot = den */
+        load_complex_comp(l, csz2, &st, r2);                /* numerator_re */
+        load_complex_comp(l, csize, &st, r2);               /* den: vtop=den, vtop[-1]=num */
         gen_opif('/');                                  /* num/den */
-        store_complex_comp(l, 0, &st);                  /* re */
+        store_complex_comp(l, 0, &st, r2);                  /* re */
         /* im = (b*c - a*d)/den */
         push_complex_component(&sv1, 1, csize, &st);   /* b */
         push_complex_component(&sv2, 0, csize, &st);   /* c */
         gen_opif('*');                                  /* b*c */
-        store_complex_comp(l, csz2, &st);               /* im slot = b*c */
+        store_complex_comp(l, csz2, &st, r2);               /* im slot = b*c */
         push_complex_component(&sv1, 0, csize, &st);   /* a */
         push_complex_component(&sv2, 1, csize, &st);   /* d */
         gen_opif('*');                                  /* a*d */
-        load_complex_comp(l, csz2, &st);                /* b*c */
+        load_complex_comp(l, csz2, &st, r2);                /* b*c */
         vswap();                                        /* vtop=a*d, vtop[-1]=b*c */
         gen_opif('-');                                  /* b*c - a*d */
-        load_complex_comp(l, csize, &st);               /* den: vtop=den, vtop[-1]=num */
+        load_complex_comp(l, csize, &st, r2);               /* den: vtop=den, vtop[-1]=num */
         gen_opif('/');                                  /* num/den */
-        store_complex_comp(l, csz2, &st);               /* im */
+        store_complex_comp(l, csz2, &st, r2);               /* im */
     } else {
         tcc_error("unsupported complex operator");
     }
@@ -2686,6 +2689,7 @@ static void gen_opf_complex(int op, int bt)
     vpushi(l);
     vtop->type = ct;
     vtop->r = VT_LOCAL | VT_LVAL;
+    vtop->r2 = r2;
 }
 
 /* generate a floating point operation with constant propagation */
@@ -3156,9 +3160,11 @@ static int combine_types(CType *dest, SValue *op1, SValue *op2, int op)
     } else if (is_float(bt1) || is_float(bt2)) {
         if (bt1 == VT_CDOUBLE || bt2 == VT_CDOUBLE
             || bt1 == VT_CFLOAT || bt2 == VT_CFLOAT) {
-            /* _Complex arithmetic: result is complex; any scalar
-               operand is converted to the complex type */
-            if (bt1 == VT_CDOUBLE || bt2 == VT_CDOUBLE)
+            /* _Complex arithmetic: result is complex; the component
+               type is double if any operand is double or _Complex
+               double, else float */
+            if (bt1 == VT_CDOUBLE || bt2 == VT_CDOUBLE
+                || bt1 == VT_DOUBLE || bt2 == VT_DOUBLE)
                 type.t = VT_CDOUBLE;
             else
                 type.t = VT_CFLOAT;
@@ -3444,6 +3450,7 @@ static int complex_to_temp(CType *ct)
     vpushi(l);
     vtop->type = *ct;
     vtop->r = VT_LOCAL | VT_LVAL;
+    vtop->r2 = r2;
     return l;
 }
 
@@ -3451,8 +3458,38 @@ static void gen_cast_complex(CType *type, int sbt_bt, int dbt_bt)
 {
     if (dbt_bt == VT_CDOUBLE || dbt_bt == VT_CFLOAT) {
         if (sbt_bt == VT_CDOUBLE || sbt_bt == VT_CFLOAT) {
-            if (sbt_bt != dbt_bt)
-                tcc_error("_Complex width conversion not supported yet");
+            if (sbt_bt != dbt_bt) {
+                /* complex width conversion: convert each component */
+                int src_csz = (sbt_bt == VT_CDOUBLE) ? 16 : 8;
+                int dst_csz = (dbt_bt == VT_CDOUBLE) ? 16 : 8;
+                int l, r2, is_im;
+                CType st_s, st_d;
+                st_s.t = (sbt_bt == VT_CDOUBLE) ? VT_DOUBLE : VT_FLOAT;
+                st_d.t = (dbt_bt == VT_CDOUBLE) ? VT_DOUBLE : VT_FLOAT;
+                l = get_temp_local_var(dst_csz,
+                                       (dbt_bt == VT_CDOUBLE) ? 8 : 4, &r2);
+                for (is_im = 0; is_im < 2; ++is_im) {
+                    int off = is_im ? dst_csz / 2 : 0;
+                    vpushv(vtop);
+                    vtop->type = st_s;
+                    if (is_im)
+                        vtop->c.i += src_csz / 2;
+                    gv(RC_FLOAT);
+                    gen_cast(&st_d);
+                    vpushi(l + off);
+                    vtop->type = st_d;
+                    vtop->r = VT_LOCAL | VT_LVAL;
+                    vtop->r2 = r2;
+                    vswap();
+                    vstore();
+                    vpop();
+                }
+                vpop(); /* drop the source complex operand */
+                vpushi(l);
+                vtop->type = *type;
+                vtop->r = VT_LOCAL | VT_LVAL;
+                vtop->r2 = r2;
+            }
             return; /* complex -> complex same width: no-op */
         }
         /* scalar -> complex */
@@ -3925,7 +3962,12 @@ ST_FUNC void vstore(void)
 
     if (sbt == VT_STRUCT || sbt == VT_CDOUBLE || sbt == VT_CFLOAT) {
         /* structure assignment (or _Complex, handled as a two-part
-           object): generate memcpy */
+           object): generate memcpy.  Complex width conversion first. */
+        if ((sbt == VT_CDOUBLE || sbt == VT_CFLOAT)
+            && (dbt == VT_CDOUBLE || dbt == VT_CFLOAT) && sbt != dbt) {
+            gen_cast(&vtop[-1].type);
+            sbt = vtop->type.t & VT_BTYPE;
+        }
         size = type_size(&vtop->type, &align);
         /* destination, keep on stack() as result */
         vpushv(vtop - 1);
@@ -5031,7 +5073,8 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
             u = VT_BOOL;
             goto basic_type;
         case TOK_COMPLEX:
-            /* C11: _Complex alone means _Complex double; must not fall
+            /* C11: _Complex alone means _Complex double; also allow
+               "double _Complex" / "float _Complex" order.  Must not fall
                through to basic_type (it would consume an extra token). */
             next();
             if (tok == TOK_DOUBLE) {
@@ -5043,8 +5086,12 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
             } else {
                 u = VT_CDOUBLE;
             }
-            if (bt != -1 || (st != -1 && u != VT_INT))
+            if (bt == VT_DOUBLE || bt == VT_FLOAT) {
+                /* "double _Complex" / "float _Complex" */
+                u = (bt == VT_DOUBLE) ? VT_CDOUBLE : VT_CFLOAT;
+            } else if (bt != -1 || (st != -1 && u != VT_INT)) {
                 goto tmbt;
+            }
             bt = u;
             t = (t & ~(VT_BTYPE | VT_LONG)) | u;
             typespec_found = 1;
@@ -8293,6 +8340,45 @@ static void decl_initializer(init_params *p, CType *type, unsigned long c, int f
 	parse_init_elem(!p->sec ? EXPR_ANY : EXPR_CONST);
         nocode_wanted = ncw_prev;
         flags |= DIF_HAVE_ELEM;
+    }
+
+    if ((type->t & VT_BTYPE) == VT_CDOUBLE || (type->t & VT_BTYPE) == VT_CFLOAT) {
+        /* _Complex initializer: {re, im} or scalar (re = value, im = 0) */
+        CType ct;
+        int csize, comp_bt;
+        comp_bt = ((type->t & VT_BTYPE) == VT_CDOUBLE) ? VT_DOUBLE : VT_FLOAT;
+        csize = (comp_bt == VT_DOUBLE) ? 16 : 8;
+        ct.t = comp_bt;
+        ct.ref = NULL;
+        if (tok == '{') {
+            next();
+            if (!(flags & (DIF_CLEAR | DIF_SIZE_ONLY))) {
+                init_putz(p, c, csize);
+                flags |= DIF_CLEAR;
+            }
+            parse_init_elem(!p->sec ? EXPR_ANY : EXPR_CONST);
+            init_putv(p, &ct, c);
+            skip(',');
+            parse_init_elem(!p->sec ? EXPR_ANY : EXPR_CONST);
+            init_putv(p, &ct, c + csize / 2);
+            skip('}');
+        } else {
+            /* The initializer expression may already have been parsed by
+               the generic element path (DIF_HAVE_ELEM). */
+            if (!(flags & DIF_HAVE_ELEM))
+                parse_init_elem(!p->sec ? EXPR_ANY : EXPR_CONST);
+            if ((vtop->type.t & VT_BTYPE) == VT_CDOUBLE
+                || (vtop->type.t & VT_BTYPE) == VT_CFLOAT) {
+                /* complex expression: copy the whole two-part object */
+                init_putv(p, type, c);
+            } else {
+                /* scalar: re = value, im = 0 */
+                init_putv(p, &ct, c);
+                if (!(flags & DIF_SIZE_ONLY))
+                    init_putz(p, c + csize / 2, csize / 2);
+            }
+        }
+        return;
     }
 
     if (type->t & VT_ARRAY) {
