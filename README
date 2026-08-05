@@ -151,7 +151,7 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 | `u"..."` / `U"..."` 字符串 | ✅ | char16_t/char32_t 数组字面量：u"..." UTF-16（非 BMP 自动代理对）、U"..." UTF-32，支持拼接/全局/指针初始化（本次补全） |
 | `_Complex` 复数 | ✅ | `_Complex double/float` 完整支持：类型/赋值/四则运算/宽度转换/初始化/`<complex.h>`（I/creal/cimag）/函数参数与返回 ABI（v0/v1，含 float 复数与嵌套）；`__STDC_NO_COMPLEX__` 已移除 |
 | `<threads.h>` 线程 API | ✅ | thrd/mtx/cnd/tss/call_once 全套 + `thread_local` 宏；`__STDC_NO_THREADS__` 不再定义 |
-| C23 特性（逐步） | ✅ | `-std=c23` 模式（`__STDC_VERSION__`=202311L）：数字分隔符、`bool`/`true`/`false`/`nullptr`、`__VA_OPT__`、`[[...]]` 标准属性、`constexpr` 对象、`#embed` 二进制嵌入、`<stdbit.h>` 位操作、二进制字面量、`#elifdef`、`typeof`、`auto`、`enum` 底层类型、case 范围 |
+| C23 特性（逐步） | ✅ | `-std=c23` 模式（`__STDC_VERSION__`=202311L）：数字分隔符、`bool`/`true`/`false`/`nullptr`+`nullptr_t`、`__VA_OPT__`、`[[...]]` 标准属性（`[[noreturn]]` 有语义）、`constexpr` 对象、`#embed`、`<stdbit.h>`、`_BitInt(N)`（N≤64 映射标准整数）、二进制字面量、`#elifdef`、`typeof`、`auto`、`enum` 底层类型、case 范围 |
 
 ### 补全路线图
 

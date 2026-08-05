@@ -5063,6 +5063,35 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
                 t = (t & ~(VT_BTYPE|VT_LONG)) | u;
             typespec_found = 1;
             break;
+        case TOK_BITINT:
+            /* C23 _BitInt(N): map widths <= 64 onto standard integers.
+               Handle inline (like TOK_COMPLEX): basic_type would
+               consume the next token (the declarator name). */
+            {
+                int n;
+                next();
+                skip('(');
+                n = expr_const();
+                skip(')');
+                if (n <= 8)
+                    u = VT_BYTE;
+                else if (n <= 16)
+                    u = VT_SHORT;
+                else if (n <= 32)
+                    u = VT_INT;
+                else if (n <= 64)
+                    u = VT_LLONG;
+                else
+                    tcc_error("_BitInt(%d) not supported (max 64)", n);
+                if (u == VT_BYTE && !(t & VT_UNSIGNED))
+                    t |= VT_DEFSIGN; /* explicit signed: Android char is unsigned */
+                if (bt != -1 || (st != -1 && u != VT_INT))
+                    goto tmbt;
+                bt = u;
+                t = (t & ~(VT_BTYPE | VT_LONG)) | u;
+                typespec_found = 1;
+                break;
+            }
         case TOK_VOID:
             u = VT_VOID;
             goto basic_type;

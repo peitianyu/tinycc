@@ -94,6 +94,7 @@
      DEF(TOK___VA_ARGS__, "__VA_ARGS__")
      DEF(TOK___VA_OPT__, "__VA_OPT__")
      DEF(TOK_CONSTEXPR, "constexpr")
+     DEF(TOK_BITINT, "_BitInt")
      DEF(TOK___COUNTER__, "__COUNTER__")
      DEF(TOK___HAS_INCLUDE, "__has_include")
      DEF(TOK___HAS_INCLUDE_NEXT, "__has_include_next")
