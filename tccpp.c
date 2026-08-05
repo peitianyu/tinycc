@@ -1780,6 +1780,63 @@ pragma_err:
     tcc_error("malformed #pragma directive");
 }
 
+/* C99/C11 _Pragma operator: _Pragma("string-literal") is equivalent to a
+   #pragma directive.  The string's \\ and \" escapes are processed per
+   6.10.9.  The directive text is re-tokenized from a synthetic buffer file
+   so it flows through preprocess()/pragma_parse() exactly like #pragma. */
+static void handle_pragma_operator(void)
+{
+    TCCState *s1 = tcc_state;
+    CString cs;
+    char *content;
+    const char *p;
+    int len, i, j, c;
+
+    next_nomacro();
+    if (tok != '(')
+        goto pragma_op_err;
+    next_nomacro();
+    if (tok != TOK_PPSTR)
+        goto pragma_op_err;
+    p = tokc.str.data;
+    len = tokc.str.size; /* includes quotes and terminating NUL */
+    if (len < 3 || p[0] != '"' || p[len - 2] != '"')
+        goto pragma_op_err;
+    content = tcc_malloc(len);
+    for (i = 1, j = 0; i < len - 2; ++i) {
+        c = p[i];
+        if (c == '\\' && i + 1 < len - 2) {
+            c = p[++i];
+            if (c != '\\' && c != '\"')
+                tcc_error("_Pragma: invalid escape '\\%c' in string literal", c);
+        }
+        content[j++] = c;
+    }
+    content[j] = 0;
+    next_nomacro();
+    if (tok != ')')
+        goto pragma_op_err;
+
+    /* feed "#pragma <content>\n" to the preprocessor as a buffer file */
+    cstr_new(&cs);
+    cstr_ccat(&cs, '#');
+    cstr_cat(&cs, "pragma", 6);
+    cstr_ccat(&cs, ' ');
+    cstr_cat(&cs, content, j);
+    cstr_ccat(&cs, '\n');
+    /* No NUL terminator: tcc_open_bf places CH_EOB after cs.size bytes.  Push the current file so buffer EOF pops back instead of terminating compilation (include_stack untouched by open_bf). */
+    *s1->include_stack_ptr++ = file;
+    tcc_open_bf(s1, ":pragma:", cs.size);
+    memcpy(file->buffer, cs.data, cs.size);
+    tok_flags |= TOK_FLAG_BOL; /* let preprocess() handle the line */
+    cstr_free(&cs);
+    tcc_free(content);
+    return;
+
+pragma_op_err:
+    tcc_error("_Pragma expects ( string-literal )");
+}
+
 /* put alternative filename */
 ST_FUNC void tccpp_putfile(const char *filename)
 {
@@ -3534,9 +3591,16 @@ redo:
             }
         }
         tok = t;
+        if (t == TOK__Pragma) {
+            /* _Pragma produced by macro expansion: the remaining pragma
+               tokens live in the macro stream, which cannot currently be
+               re-dispatched through preprocess(); reject clearly. */
+            tcc_error("_Pragma inside macro expansion is not supported");
+        }
         return;
     }
 
+file_tokens:
     next_nomacro();
     t = tok;
     if (t >= TOK_IDENT && (parse_flags & PARSE_FLAG_PREPROCESS)) {
@@ -3548,6 +3612,14 @@ redo:
             tok_str_add(&tokstr_buf, 0);
             begin_macro(&tokstr_buf, 0);
             goto redo;
+        }
+        if (t == TOK__Pragma) {
+            /* _Pragma("...") operator: re-dispatch as a #pragma line.
+               Do NOT goto redo here: that label is inside the macro
+               loop and would dereference macro_ptr (NULL when reading
+               from a file).  Re-tokenize from the file instead. */
+            handle_pragma_operator();
+            goto file_tokens;
         }
         return;
     }

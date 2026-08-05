@@ -204,6 +204,7 @@
      DEF_ATOMIC(atomic_nand_fetch)
 
 /* pragma */
+     DEF(TOK__Pragma, "_Pragma")
      DEF(TOK_pack, "pack")
 #if !defined(TCC_TARGET_I386) && !defined(TCC_TARGET_X86_64) && \
     !defined(TCC_TARGET_ARM) && !defined(TCC_TARGET_ARM64) && \

@@ -145,7 +145,7 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 | `_Thread_local` | ⚠️ | 语法与编译通过；Android bionic 要求 TLS 段 64B 对齐而 TCC 只生成 8B，运行时受限（上游同源问题） |
 | `char16_t`/`char32_t` | ⚠️ | 无内置类型；Windows 版自带 `win32/include/uchar.h` 用 typedef 兜底；Linux 系统头文件依赖 GCC 内置宏 `__CHAR16_TYPE__` |
 | `aligned_alloc` 等 | ⚠️ | 函数存在，但 bionic 头文件用 `__BIONIC_AVAILABILITY_GUARD`（依赖 Clang 宏）屏蔽声明 |
-| `_Pragma` 操作符 | ❌ | C99 起就有；TCC 仅实现 `#pragma` 指令（补全中） |
+| `_Pragma` 操作符 | ✅ | 文件级支持（pack/push/pop/comment 等，含 `\\`/`\"` 转义处理）；宏内展开暂不支持（报错） |
 | `u8"..."` 字符串前缀 | ✅ | C11 UTF-8 字符串，与普通字符串同类型（char[]），支持拼接与 `\u` 转义（本次补全） |
 | `u'x'` / `U'x'` 字面量 | ❌ | char16_t/char32_t 字面量（补全中） |
 | `<threads.h>` 线程 API | ❌ | thrd_t/mtx_t/cnd_t/tss_t 全缺（补全中） |
@@ -156,7 +156,7 @@ TCC 定位是"完整 C99 + 大部分 C11"。以下矩阵由 `-std=c11` 实测得
 → git 提交 → 推送 GitHub：
 
 1. ~~`u8"..."` 字符串前缀~~ ✅ 已完成（语义 = UTF-8 普通字符串）
-2. `_Pragma` 操作符（字符串化 pragma）
+2. ~~`_Pragma` 操作符~~ ✅ 已完成（文件级；宏内展开暂不支持）
 3. `u`/`U` 字面量前缀 + 自带 `uchar.h`
 4. `<threads.h>` 线程 API（pthread 包装）
 
