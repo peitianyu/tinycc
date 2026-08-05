@@ -2184,6 +2184,10 @@ static void parse_string(const char *s, int len)
     uint8_t buf[1000], *p = buf;
     int is_long, sep;
 
+    /* C11 u8 prefix: plain char string, UTF-8 encoded like a normal
+       string literal.  Drop the prefix; token type stays TOK_STR. */
+    if (s[0] == 'u' && s[1] == '8' && s[2] == '\"')
+        s += 2, len -= 2;
     if ((is_long = *s == 'L'))
         ++s, --len;
     sep = *s++;
@@ -2556,7 +2560,7 @@ static void parse_number(const char *p)
 /* return next token without macro substitution */
 static void next_nomacro(void)
 {
-    int t, c, is_long, len;
+    int t, c, is_long, is_u8, len;
     TokenSym *ts;
     uint8_t *p, *p1;
     unsigned int h;
@@ -2673,7 +2677,7 @@ maybe_newline:
     case 'i': case 'j': case 'k': case 'l':
     case 'm': case 'n': case 'o': case 'p':
     case 'q': case 'r': case 's': case 't':
-    case 'u': case 'v': case 'w': case 'x':
+    case 'v': case 'w': case 'x':
     case 'y': case 'z': 
     case 'A': case 'B': case 'C': case 'D':
     case 'E': case 'F': case 'G': case 'H':
@@ -2731,6 +2735,23 @@ maybe_newline:
                 goto str_const;
             }
             *--p = c = 'L';
+        }
+        goto parse_ident_fast;
+
+    case 'u':
+        /* C11 u8"..." UTF-8 string literal (type char[]).  Must be a
+           single preprocessing token: '8' immediately followed by '"'.
+           Plain identifiers (union, unsigned, u8, ...) fall through. */
+        t = p[1];
+        if (t == '8' && p[2] == '\"') {
+            PEEKC(c, p); /* skip 'u' -> c='8' */
+            PEEKC(c, p); /* skip '8' -> c='"', p now on the quote */
+            if (c == '\"') {
+                is_long = 0;
+                is_u8 = 1;
+                goto str_const;
+            }
+            *--p = c = 'u';
         }
         goto parse_ident_fast;
 
@@ -2792,9 +2813,12 @@ maybe_newline:
     case '\"':
         is_long = 0;
     str_const:
+        is_u8 = 0; /* reset per-token: only the 'u' prefix case sets it */
         cstr_reset(&tokcstr);
         if (is_long)
             cstr_ccat(&tokcstr, 'L');
+        else if (is_u8)
+            cstr_cat(&tokcstr, "u8", 2);
         cstr_ccat(&tokcstr, c);
         p = parse_pp_string(p, c, &tokcstr);
         cstr_ccat(&tokcstr, c);
