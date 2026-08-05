@@ -1925,6 +1925,33 @@ ST_FUNC void preprocess(int is_bof)
     case TOK_INCLUDE_NEXT:
         parse_include(s1, tok - TOK_INCLUDE, 0);
         goto the_end;
+    case TOK_embed:
+        /* C23 #embed "file": embed file bytes as int constants */
+        {
+            char name[1024];
+            int fd, n, i;
+            CString cs;
+            unsigned char buf[4096];
+            next_nomacro();
+            if (tok != TOK_PPSTR)
+                tcc_error("#embed expects \"filename\"");
+            pstrncpy(name, sizeof name, tokc.str.data + 1, tokc.str.size - 3);
+            fd = open(name, O_RDONLY);
+            if (fd < 0)
+                tcc_error("cannot open file '%s' for #embed", name);
+            /* feed the byte values as a text buffer file (like _Pragma),
+               so the token stream is consumed in file order */
+            cstr_new(&cs);
+            while ((n = read(fd, buf, sizeof buf)) > 0)
+                for (i = 0; i < n; i++)
+                    cstr_printf(&cs, "%d,", buf[i]);
+            close(fd);
+            *s1->include_stack_ptr++ = file;
+            tcc_open_bf(s1, ":embed:", cs.size);
+            memcpy(file->buffer, cs.data, cs.size);
+            cstr_free(&cs);
+        }
+        goto the_end;
     case TOK_IFNDEF:
         c = 1;
         goto do_ifdef;
@@ -3824,6 +3851,10 @@ redo:
 
 file_tokens:
     next_nomacro();
+    if (macro_ptr)
+        /* e.g. #embed inserted a token stream via begin_macro inside
+           preprocess(); re-enter the macro loop to consume it */
+        goto redo;
     t = tok;
     if (t >= TOK_IDENT && (parse_flags & PARSE_FLAG_PREPROCESS)) {
         /* if reading from file, try to substitute macros */
