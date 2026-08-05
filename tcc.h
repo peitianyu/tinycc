@@ -1069,6 +1069,7 @@ struct filespec {
 #define VT_TYPEDEF 0x00004000  /* typedef definition */
 #define VT_INLINE  0x00008000  /* inline definition */
 #define VT_TLS     0x00010000  /* thread-local storage */
+#define VT_CONSTEXPR 0x00020000 /* C23 constexpr object */
 /* currently unused: 0x000[248]0000  */
 
 #define VT_STRUCT_SHIFT 20     /* shift for bitfield shift values (32 - 2*6) */

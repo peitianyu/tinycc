@@ -5218,6 +5218,11 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
         case TOK_TYPEDEF:
             g = VT_TYPEDEF;
             goto storage;
+        case TOK_CONSTEXPR:
+            /* C23 constexpr: compile-time constant, internal linkage */
+            t |= VT_CONSTEXPR | VT_STATIC;
+            next();
+            break;
        storage:
             if (t & (VT_EXTERN|VT_STATIC|VT_TYPEDEF) & ~g)
                 tcc_error("multiple storage classes");
@@ -9317,6 +9322,23 @@ static int decl(int l)
                     } else if (!(type.t & VT_ARRAY)) {
                         /* not lvalue if array */
                         r |= VT_LVAL;
+                    }
+
+                    if (tok == '=' && (type.t & VT_CONSTEXPR)) {
+                        /* C23 constexpr: name = const-expr; becomes an
+                           enum-like compile-time constant */
+                        Sym *cs;
+                        long long val;
+                        next();
+                        val = expr_const();
+                        skip(';');
+                        type.t &= ~(VT_CONSTEXPR | VT_STORAGE);
+                        type.t |= VT_ENUM_VAL;
+                        cs = sym_push(v, &type, VT_CONST, 0);
+                        cs->enum_val = val;
+                        if (debug_modes)
+                            tcc_debug_typedef(tcc_state, cs);
+                        break; /* declaration done */
                     }
 
                     if (tok == '=')
