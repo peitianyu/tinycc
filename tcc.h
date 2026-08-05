@@ -517,7 +517,9 @@ struct FuncAttr {
     func_dtor   : 1, /* attribute((destructor)) */
     func_args   : 8, /* PE __stdcall args */
     func_alwinl : 1, /* always_inline */
-    xxxx        : 15;
+    func_nodiscard : 1, /* C23 [[nodiscard]] */
+    func_deprecated : 1, /* C23 [[deprecated]] */
+    xxxx        : 13;
 };
 
 /* symbol management */

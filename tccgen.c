@@ -5025,8 +5025,15 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
                 continue;
             }
             /* known attributes with semantic effect */
-            if (tok >= TOK_IDENT && !strcmp(get_tok_str(tok, &tokc), "noreturn"))
-                ad->f.func_noreturn = 1;
+            if (tok >= TOK_IDENT) {
+                const char *an = get_tok_str(tok, &tokc);
+                if (!strcmp(an, "noreturn"))
+                    ad->f.func_noreturn = 1;
+                else if (!strcmp(an, "nodiscard"))
+                    ad->f.func_nodiscard = 1;
+                else if (!strcmp(an, "deprecated"))
+                    ad->f.func_deprecated = 1;
+            }
             next();
         }
         if (tok == ']') {
@@ -6516,6 +6523,10 @@ special_math_val:
 	   regvars.  */
 	vtop->sym = s;
 
+        if ((s->type.t & VT_BTYPE) == VT_FUNC
+            && s->type.ref->f.func_deprecated)
+            tcc_warning("'%s' is deprecated", get_tok_str(t, NULL));
+
         if (r & VT_SYM) {
             vtop->c.i = 0;
 #ifdef TCC_TARGET_PE
@@ -6750,6 +6761,10 @@ special_math_val:
 	            tcc_tcov_block_end(tcc_state, -1);
                 CODE_OFF();
 	    }
+            /* C23 [[nodiscard]] is accepted syntactically; warning on
+               discarded results is not implemented (vtop->sym marking
+               had side effects). */
+
         } else {
             break;
         }
