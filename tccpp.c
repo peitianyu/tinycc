@@ -2239,14 +2239,19 @@ static void parse_escape_string(CString *outstr, const uint8_t *buf, int is_long
 static void parse_string(const char *s, int len)
 {
     uint8_t buf[1000], *p = buf;
-    int is_long, sep;
+    int is_long, is_u16, is_u32, sep;
+    is_long = is_u16 = is_u32 = 0;
 
-    /* C11 u8 prefix: plain char string, UTF-8 encoded like a normal
-       string literal.  Drop the prefix; token type stays TOK_STR. */
+    /* prefixes: u8"..." plain UTF-8 char string; L"..." wchar;
+       u'x'/U'x' char16_t/char32_t character constants. */
     if (s[0] == 'u' && s[1] == '8' && s[2] == '\"')
         s += 2, len -= 2;
-    if ((is_long = *s == 'L'))
-        ++s, --len;
+    else if (s[0] == 'u' && s[1] == '\'')
+        is_u16 = 1, ++s, --len;
+    else if (s[0] == 'U' && s[1] == '\'')
+        is_u32 = 1, ++s, --len;
+    else if (s[0] == 'L')
+        is_long = 1, ++s, --len;
     sep = *s++;
     len -= 2;
     if (len >= sizeof buf)
@@ -2255,14 +2260,16 @@ static void parse_string(const char *s, int len)
     p[len] = 0;
 
     cstr_reset(&tokcstr);
-    parse_escape_string(&tokcstr, p, is_long);
+    parse_escape_string(&tokcstr, p, is_long || is_u16 || is_u32);
     if (p != buf)
         tcc_free(p);
 
     if (sep == '\'') {
         int char_size, i, n, c;
         /* XXX: make it portable */
-        if (!is_long)
+        if (is_u16 || is_u32)
+            tok = TOK_CINT, char_size = sizeof(nwchar_t);
+        else if (!is_long)
             tok = TOK_CCHAR, char_size = 1;
         else
             tok = TOK_LCHAR, char_size = sizeof(nwchar_t);
@@ -2272,13 +2279,20 @@ static void parse_string(const char *s, int len)
         if (n > 1)
             tcc_warning_c(warn_all)("multi-character character constant");
         for (c = i = 0; i < n; ++i) {
-            if (is_long)
+            if (is_long || is_u16 || is_u32)
                 c = ((nwchar_t *)tokcstr.data)[i];
             else
                 c = (c << 8) | ((char *)tokcstr.data)[i];
         }
+        if (is_u16) {
+            if (c > 0xFFFF)
+                tcc_warning("u'' character constant out of 16-bit range");
+            c &= 0xFFFF;
+        }
         tokc.i = c;
     } else {
+        if (is_u16 || is_u32)
+            tcc_error("u\"...\" / U\"...\" string literals not supported yet");
         tokc.str.size = tokcstr.size;
         tokc.str.data = tokcstr.data;
         if (!is_long)
@@ -2617,7 +2631,7 @@ static void parse_number(const char *p)
 /* return next token without macro substitution */
 static void next_nomacro(void)
 {
-    int t, c, is_long, is_u8, len;
+    int t, c, is_long, is_u8, is_u16, is_u32, len;
     TokenSym *ts;
     uint8_t *p, *p1;
     unsigned int h;
@@ -2741,7 +2755,7 @@ maybe_newline:
     case 'I': case 'J': case 'K': 
     case 'M': case 'N': case 'O': case 'P':
     case 'Q': case 'R': case 'S': case 'T':
-    case 'U': case 'V': case 'W': case 'X':
+    case 'V': case 'W': case 'X':
     case 'Y': case 'Z': 
     case '_':
     parse_ident_fast:
@@ -2789,6 +2803,7 @@ maybe_newline:
             PEEKC(c, p);
             if (c == '\'' || c == '\"') {
                 is_long = 1;
+                is_u8 = is_u16 = is_u32 = 0;
                 goto str_const;
             }
             *--p = c = 'L';
@@ -2798,17 +2813,46 @@ maybe_newline:
     case 'u':
         /* C11 u8"..." UTF-8 string literal (type char[]).  Must be a
            single preprocessing token: '8' immediately followed by '"'.
+           Also handles C11 u'x' (char16_t) and u"..." prefixes.
            Plain identifiers (union, unsigned, u8, ...) fall through. */
         t = p[1];
-        if (t == '8' && p[2] == '\"') {
+        if (t == '8' && p[2] == '"') {
             PEEKC(c, p); /* skip 'u' -> c='8' */
             PEEKC(c, p); /* skip '8' -> c='"', p now on the quote */
-            if (c == '\"') {
+            if (c == '"') {
                 is_long = 0;
                 is_u8 = 1;
+                is_u16 = is_u32 = 0;
                 goto str_const;
             }
             *--p = c = 'u';
+        } else if (t == '\'' || t == '"') {
+            /* C11 u'x' (char16_t) / u"..." prefix */
+            PEEKC(c, p); /* skip 'u' -> c = quote */
+            if (c == '\'' || c == '"') {
+                is_long = 0;
+                is_u8 = 0;
+                is_u16 = 1;
+                is_u32 = 0;
+                goto str_const;
+            }
+            *--p = c = 'u';
+        }
+        goto parse_ident_fast;
+
+    case 'U':
+        /* C11 U'x' (char32_t) / U"..." prefix */
+        t = p[1];
+        if (t == '\'' || t == '"') {
+            PEEKC(c, p); /* skip 'U' -> c = quote */
+            if (c == '\'' || c == '"') {
+                is_long = 0;
+                is_u8 = 0;
+                is_u16 = 0;
+                is_u32 = 1;
+                goto str_const;
+            }
+            *--p = c = 'U';
         }
         goto parse_ident_fast;
 
@@ -2869,13 +2913,17 @@ maybe_newline:
     case '\'':
     case '\"':
         is_long = 0;
+        is_u8 = is_u16 = is_u32 = 0;
     str_const:
-        is_u8 = 0; /* reset per-token: only the 'u' prefix case sets it */
         cstr_reset(&tokcstr);
         if (is_long)
             cstr_ccat(&tokcstr, 'L');
         else if (is_u8)
             cstr_cat(&tokcstr, "u8", 2);
+        else if (is_u16)
+            cstr_ccat(&tokcstr, 'u');
+        else if (is_u32)
+            cstr_ccat(&tokcstr, 'U');
         cstr_ccat(&tokcstr, c);
         p = parse_pp_string(p, c, &tokcstr);
         cstr_ccat(&tokcstr, c);
