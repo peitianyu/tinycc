@@ -5024,6 +5024,9 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
                 next();
                 continue;
             }
+            /* known attributes with semantic effect */
+            if (tok >= TOK_IDENT && !strcmp(get_tok_str(tok, &tokc), "noreturn"))
+                ad->f.func_noreturn = 1;
             next();
         }
         if (tok == ']') {
