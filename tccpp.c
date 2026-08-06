@@ -2292,13 +2292,14 @@ static void parse_escape_string(CString *outstr, const uint8_t *buf, int is_long
 static void parse_string(const char *s, int len)
 {
     uint8_t buf[1000], *p = buf;
-    int is_long, is_u16, is_u32, sep;
-    is_long = is_u16 = is_u32 = 0;
+    int is_long, is_u8, is_u16, is_u32, sep;
+    is_long = is_u8 = is_u16 = is_u32 = 0;
 
-    /* prefixes: u8"..." plain UTF-8 char string; L"..." wchar;
-       u'x'/U'x' char16_t/char32_t character constants. */
-    if (s[0] == 'u' && s[1] == '8' && s[2] == '\"')
-        s += 2, len -= 2;
+    /* prefixes: u8"..." plain UTF-8 char string; u8'x' UTF-8 char
+       constant; L"..." wchar; u'x'/U'x' char16_t/char32_t character
+       constants. */
+    if (s[0] == 'u' && s[1] == '8' && (s[2] == '\"' || s[2] == '\''))
+        is_u8 = 1, s += 2, len -= 2;
     else if (s[0] == 'u' && s[1] == '\'')
         is_u16 = 1, ++s, --len;
     else if (s[0] == 'U' && s[1] == '\'')
@@ -2317,7 +2318,11 @@ static void parse_string(const char *s, int len)
     p[len] = 0;
 
     cstr_reset(&tokcstr);
-    parse_escape_string(&tokcstr, p, is_long || is_u16 || is_u32);
+    /* u8 character constants (not strings) must keep \u/\U/\x as raw
+       code points so a single u8'x' is one scalar value, not its UTF-8
+       bytes.  u8 strings stay narrow (UTF-8 byte output). */
+    parse_escape_string(&tokcstr, p,
+                        is_long || is_u16 || is_u32 || (is_u8 && sep == '\''));
     if (p != buf)
         tcc_free(p);
 
@@ -2326,6 +2331,8 @@ static void parse_string(const char *s, int len)
         /* XXX: make it portable */
         if (is_u16 || is_u32)
             tok = TOK_CINT, char_size = sizeof(nwchar_t);
+        else if (is_u8)
+            tok = TOK_CCHAR, char_size = sizeof(nwchar_t);
         else if (!is_long)
             tok = TOK_CCHAR, char_size = 1;
         else
@@ -2336,7 +2343,7 @@ static void parse_string(const char *s, int len)
         if (n > 1)
             tcc_warning_c(warn_all)("multi-character character constant");
         for (c = i = 0; i < n; ++i) {
-            if (is_long || is_u16 || is_u32)
+            if (is_long || is_u16 || is_u32 || is_u8)
                 c = ((nwchar_t *)tokcstr.data)[i];
             else
                 c = (c << 8) | ((char *)tokcstr.data)[i];
@@ -2916,15 +2923,16 @@ maybe_newline:
         goto parse_ident_fast;
 
     case 'u':
-        /* C11 u8"..." UTF-8 string literal (type char[]).  Must be a
-           single preprocessing token: '8' immediately followed by '"'.
+        /* C11 u8"..." UTF-8 string literal (type char[]) and C23
+           u8'x' UTF-8 character constant.  Must be a single
+           preprocessing token: '8' immediately followed by a quote.
            Also handles C11 u'x' (char16_t) and u"..." prefixes.
            Plain identifiers (union, unsigned, u8, ...) fall through. */
         t = p[1];
-        if (t == '8' && p[2] == '"') {
+        if (t == '8' && (p[2] == '"' || p[2] == '\'')) {
             PEEKC(c, p); /* skip 'u' -> c='8' */
-            PEEKC(c, p); /* skip '8' -> c='"', p now on the quote */
-            if (c == '"') {
+            PEEKC(c, p); /* skip '8' -> c=quote, p now on the quote */
+            if (c == '"' || c == '\'') {
                 is_long = 0;
                 is_u8 = 1;
                 is_u16 = is_u32 = 0;

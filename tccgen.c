@@ -5304,6 +5304,31 @@ static int parse_btype(CType *type, AttributeDef *ad, int ignore_label)
                     type1.t |= VT_BT_ARRAY;
             }
             goto basic_type2;
+            /* C23 typeof_unqual: like typeof but drop top-level
+               qualifiers (const, volatile/_Atomic).  Qualifiers on
+               pointed-to types stay.  Array types cannot themselves be
+               qualified, so their qualifiers live on the element type
+               (TCC keeps it in the anonymous array Sym chain) and must
+               be stripped there too. */
+        case TOK_TYPEOF_UNQUAL:
+        case TOK_TYPEOF_UNQUAL2:
+        case TOK_TYPEOF_UNQUAL3:
+            next();
+            parse_expr_type(&type1);
+            type1.t &= ~(VT_STORAGE&~VT_TYPEDEF);
+            type1.t &= ~(VT_CONSTANT | VT_VOLATILE);
+            if (type1.t & VT_ARRAY) {
+                CType *et = &type1;
+                while (et->t & VT_ARRAY)
+                    et = &et->ref->type;
+                et->t &= ~(VT_CONSTANT | VT_VOLATILE);
+            }
+            if (type1.ref) {
+                sym_to_attr(ad, type1.ref);
+                if (type1.t & VT_ARRAY)
+                    type1.t |= VT_BT_ARRAY;
+            }
+            goto basic_type2;
         case TOK_THREAD_LOCAL:
         case TOK___thread:
             if (t & VT_TLS)

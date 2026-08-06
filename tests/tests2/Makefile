@@ -94,6 +94,7 @@ NORUN =
 
 # Some tests might need different flags
 FLAGS =
+148_c23_more.test : FLAGS += -std=c23
 76_dollars_in_identifiers.test : FLAGS += -fdollars-in-identifiers
 ifneq (-$(CONFIG_WIN32)-,-yes-)
 22_floating_point.test: FLAGS += -lm
