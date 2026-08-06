@@ -50,6 +50,9 @@ static SValue _vstack[1 + VSTACK_SIZE];
 #define vstack (_vstack + 1)
 
 ST_DATA int nocode_wanted; /* no code generation wanted */
+
+/* name of the most recent [[nodiscard]] function call, for diagnostics */
+static const char *g_nodiscard_name;
 #define NODATA_WANTED (nocode_wanted > 0) /* no static data output wanted either */
 #define DATA_ONLY_WANTED 0x80000000 /* ON outside of functions and for static initializers */
 
@@ -6527,6 +6530,15 @@ special_math_val:
             && s->type.ref->f.func_deprecated)
             tcc_warning("'%s' is deprecated", get_tok_str(t, NULL));
 
+        /* Remember the name of a [[nodiscard]] function being referenced:
+           the function-type Sym that carries func_nodiscard is anonymous
+           (its v is SYM_FIELD), so the name can only be recovered from
+           the identifier token here.  post_type() marks the call result
+           and reuses this name for the warning.  */
+        if ((s->type.t & VT_BTYPE) == VT_FUNC
+            && s->type.ref->f.func_nodiscard)
+            g_nodiscard_name = get_tok_str(t, NULL);
+
         if (r & VT_SYM) {
             vtop->c.i = 0;
 #ifdef TCC_TARGET_PE
@@ -6761,9 +6773,17 @@ special_math_val:
 	            tcc_tcov_block_end(tcc_state, -1);
                 CODE_OFF();
 	    }
-            /* C23 [[nodiscard]] is accepted syntactically; warning on
-               discarded results is not implemented (vtop->sym marking
-               had side effects). */
+            /* C23 [[nodiscard]]: mark the call result so expression
+               statements can warn when it is discarded.  The marker is a
+               spare bit in vtop->r, NOT vtop->sym (which is used as a
+               variable backpointer elsewhere; an earlier attempt that
+               repurposed it corrupted code reading vtop->sym).  */
+            if (s->f.func_nodiscard
+                && (vtop->type.t & VT_BTYPE) != VT_VOID) {
+                vtop->r |= VT_NODISCARD;
+                /* g_nodiscard_name was captured at the identifier
+                   reference in unary(); the type Sym here is anonymous.  */
+            }
 
         } else {
             break;
@@ -7895,6 +7915,9 @@ again:
                     gexpr();
                 } else {
                     gexpr();
+                    if (vtop->r & VT_NODISCARD)
+                        tcc_warning("ignoring return value of function '%s' declared with '[[nodiscard]]'",
+                                    g_nodiscard_name ? g_nodiscard_name : "?");
                     vpop();
                 }
                 skip(';');

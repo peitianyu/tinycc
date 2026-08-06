@@ -1033,6 +1033,7 @@ struct filespec {
                                 char/short stored in integer registers) */
 #define VT_NONCONST  0x1000  /* VT_CONST, but not an (C standard) integer
                                 constant expression */
+#define VT_NODISCARD 0x2000  /* call result of a [[nodiscard]] function */
 #define VT_MUSTBOUND 0x4000  /* bound checking must be done before
                                 dereferencing value */
 #define VT_BOUNDED   0x8000  /* value is bounded. The address of the

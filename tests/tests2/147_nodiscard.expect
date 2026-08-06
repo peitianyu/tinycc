@@ -1,0 +1,3 @@
+147_nodiscard.c:10: warning: ignoring return value of function 'getval' declared with '[[nodiscard]]'
+147_nodiscard.c:11: warning: ignoring return value of function 'getd' declared with '[[nodiscard]]'
+42 7
